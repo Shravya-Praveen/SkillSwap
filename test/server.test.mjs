@@ -1,0 +1,12 @@
+import test,{before,after} from 'node:test';
+import assert from 'node:assert/strict';
+process.env.NODE_ENV='test';
+delete process.env.OPENAI_API_KEY;
+const {server}=await import('../server.mjs');
+let root;
+before(async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));root=`http://127.0.0.1:${server.address().port}`;});
+after(async()=>{await new Promise(resolve=>server.close(resolve));});
+test('serves the app and keeps secrets out of public configuration',async()=>{const page=await fetch(root);assert.equal(page.status,200);assert.match(await page.text(),/SkillSwap/);const cfg=await (await fetch(root+'/api/config')).json();assert.equal(cfg.ai,false);assert.equal(cfg.apiKey,undefined);});
+test('only explicit public files can be served',async()=>{for(const name of ['/.env','/server.mjs','/package.json','/api/missing']){assert.equal((await fetch(root+name)).status,404);}});
+test('cross-site coaching requests are rejected',async()=>{const result=await fetch(root+'/api/coach',{method:'POST',headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:JSON.stringify({goal:'learn',mode:'roadmap'})});assert.equal(result.status,403);});
+test('missing AI configuration fails clearly',async()=>{const result=await fetch(root+'/api/coach',{method:'POST',headers:{Origin:'http://localhost:3000','Content-Type':'application/json'},body:JSON.stringify({goal:'learn',mode:'roadmap'})});assert.equal(result.status,503);assert.match((await result.json()).error,/not configured/);});

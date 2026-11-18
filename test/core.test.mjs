@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mentors,defaultProfile,match,balance,book,planFor} from '../public/core.js';
+const base=()=>({profile:defaultProfile,sessions:[]});
+const session=(extras={})=>({id:'one',kind:'learn',duration:30,at:new Date(Date.now()+3600000).toISOString(),...extras});
+test('a reciprocal partner with overlapping days receives the maximum fit',()=>{const result=match(defaultProfile,mentors[0]);assert.equal(result.score,100);assert.deepEqual(result.learn,['UI/UX Design']);assert.deepEqual(result.teach,['Python']);});
+test('unrelated skills do not receive an inflated fit',()=>{assert.equal(match({learns:['Creative Writing'],teaches:['Data Analysis'],days:['Mon']},mentors[0]).score,0);});
+test('learning reserves credits, cancellation refunds, teaching earns on completion only',()=>{let state=book(base(),session());assert.equal(balance(state),90);state.sessions[0].status='cancelled';assert.equal(balance(state),120);state=book(state,session({kind:'teach',id:'two'}));assert.equal(balance(state),120);state.sessions[1].status='completed';assert.equal(balance(state),150);});
+test('insufficient credits and overlapping sessions are rejected',()=>{const state=book(base(),session());assert.throws(()=>book(state,session({id:'two'})),/overlaps/);const spent={sessions:[{kind:'learn',duration:120,status:'completed'}]};assert.throws(()=>book(spent,session()),/more time credits/);});
+test('past times and unsupported duration are rejected',()=>{assert.throws(()=>book(base(),session({at:'2020-01-01'})),/future/);assert.throws(()=>book(base(),session({duration:-30})),/duration/);});
+test('template plans use the actual goal and disclose their source',()=>{const result=planFor(defaultProfile,'Build a campus event app');assert.match(result,/Build a campus event app/);assert.match(result,/not AI-generated/);});
